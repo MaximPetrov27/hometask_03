@@ -33,6 +33,7 @@ postsRouter.get(
         {
           defaultSortBy: "createdAt",
           allowedSortBy: [
+            "blogName",
             "createdAt",
             "title",
             "shortDescription",
@@ -42,14 +43,36 @@ postsRouter.get(
           ],
         },
       );
-      const docs = await postsCollection()
-        .find({})
-        .sort({ [sortBy]: sortDirection })
-        .skip((pageNumber - 1) * pageSize)
-        .limit(pageSize)
-        .toArray();
-      const views = await Promise.all(docs.map((d) => toPostView(d)));
-      const totalCount = await postsCollection().countDocuments({});
+      let views: PostView[];
+      let totalCount: number;
+
+      if (sortBy === "blogName") {
+        const allDocs = await postsCollection().find({}).toArray();
+        const allViews = await Promise.all(allDocs.map((d) => toPostView(d)));
+        const direction = sortDirection;
+
+        allViews.sort((a, b) => {
+          const byBlogName = a.blogName.localeCompare(b.blogName);
+          if (byBlogName !== 0) {
+            return byBlogName * direction;
+          }
+          return a.id.localeCompare(b.id) * direction;
+        });
+
+        totalCount = allViews.length;
+        const start = (pageNumber - 1) * pageSize;
+        views = allViews.slice(start, start + pageSize);
+      } else {
+        const docs = await postsCollection()
+          .find({})
+          .sort({ [sortBy]: sortDirection })
+          .skip((pageNumber - 1) * pageSize)
+          .limit(pageSize)
+          .toArray();
+        views = await Promise.all(docs.map((d) => toPostView(d)));
+        totalCount = await postsCollection().countDocuments({});
+      }
+
       res
         .status(200)
         .send(buildPaginatorView(views, totalCount, pageNumber, pageSize));
