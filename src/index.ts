@@ -20,7 +20,11 @@ export default app;
 const PORT = Number(process.env.PORT) || 5001;
 
 async function start(): Promise<void> {
-  const uri = process.env.MONGO_URL ?? "mongodb://127.0.0.1:27017";
+  const uri =
+    process.env.MONGO_URL ??
+    process.env.MONGO_MONGODB_URI ??
+    process.env.MONGODB_URI ??
+    "mongodb://127.0.0.1:27017";
   if (process.env.MONGO_DB_NAME) {
     setDatabaseName(process.env.MONGO_DB_NAME);
   }
