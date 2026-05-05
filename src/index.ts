@@ -3,12 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
-import {
-  closeMongo,
-  connectMongo,
-  ensureIndexes,
-  setDatabaseName,
-} from "./db/mongo";
+import { closeMongo, ensureMongoReady } from "./db/mongo";
 import { setupApp } from "./setup-app";
 
 const app = express();
@@ -20,16 +15,7 @@ export default app;
 const PORT = Number(process.env.PORT) || 5001;
 
 async function start(): Promise<void> {
-  const uri =
-    process.env.MONGO_URL ??
-    process.env.MONGO_MONGODB_URI ??
-    process.env.MONGODB_URI ??
-    "mongodb://127.0.0.1:27017";
-  if (process.env.MONGO_DB_NAME) {
-    setDatabaseName(process.env.MONGO_DB_NAME);
-  }
-  await connectMongo(uri);
-  await ensureIndexes();
+  await ensureMongoReady();
 }
 
 if (require.main === module) {
