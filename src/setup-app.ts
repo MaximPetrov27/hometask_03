@@ -24,6 +24,9 @@ export const setupApp = (app: Express): Express => {
   app.use("/hometask_03/api/blogs", blogsRouter);
   app.use("/hometask_03/api/posts", postsRouter);
   app.use("/hometask_03/api/testing", testingRouter);
+  app.use("/hometask_04/api/blogs", blogsRouter);
+  app.use("/hometask_04/api/posts", postsRouter);
+  app.use("/hometask_04/api/testing", testingRouter);
 
   app.use("/blogs", blogsRouter);
   app.use("/posts", postsRouter);

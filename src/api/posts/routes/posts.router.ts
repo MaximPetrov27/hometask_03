@@ -6,6 +6,11 @@ import {
   type Response,
 } from "express";
 import { matchedData } from "express-validator";
+import {
+  buildPaginatorView,
+  parsePaginationQuery,
+  type PaginatorView,
+} from "../../_shared/pagination";
 import { postsCollection } from "../../../db/mongo";
 import { requireBasicAuth } from "../../../middleware/basic-auth.middleware";
 import { sendValidationErrors } from "../../../middleware/validation.middleware";
@@ -17,14 +22,37 @@ export const postsRouter = Router();
 
 postsRouter.get(
   "/",
-  async (_req: Request, res: Response<PostView[]>, next: NextFunction) => {
+  async (
+    req: Request,
+    res: Response<PaginatorView<PostView>>,
+    next: NextFunction,
+  ) => {
     try {
+      const { pageNumber, pageSize, sortBy, sortDirection } = parsePaginationQuery(
+        req,
+        {
+          defaultSortBy: "createdAt",
+          allowedSortBy: [
+            "createdAt",
+            "title",
+            "shortDescription",
+            "content",
+            "blogId",
+            "id",
+          ],
+        },
+      );
       const docs = await postsCollection()
         .find({})
-        .sort({ createdAt: -1 })
+        .sort({ [sortBy]: sortDirection })
+        .skip((pageNumber - 1) * pageSize)
+        .limit(pageSize)
         .toArray();
       const views = await Promise.all(docs.map((d) => toPostView(d)));
-      res.status(200).send(views);
+      const totalCount = await postsCollection().countDocuments({});
+      res
+        .status(200)
+        .send(buildPaginatorView(views, totalCount, pageNumber, pageSize));
     } catch (err) {
       next(err);
     }

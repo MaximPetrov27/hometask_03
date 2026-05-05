@@ -1,7 +1,7 @@
 import { body } from "express-validator";
 import { blogsCollection } from "../../db/mongo";
 
-export const postCreateValidators = [
+const postBodyValidators = [
   body("title")
     .trim()
     .notEmpty()
@@ -23,6 +23,10 @@ export const postCreateValidators = [
     .bail()
     .isLength({ max: 1000 })
     .withMessage("content is too long"),
+];
+
+export const postCreateValidators = [
+  ...postBodyValidators,
   body("blogId")
     .trim()
     .notEmpty()
@@ -36,5 +40,7 @@ export const postCreateValidators = [
       return true;
     }),
 ];
+
+export const postCreateForBlogValidators = [...postBodyValidators];
 
 export const postUpdateValidators = postCreateValidators;

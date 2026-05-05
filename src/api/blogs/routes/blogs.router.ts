@@ -6,6 +6,16 @@ import {
   type Response,
 } from "express";
 import { matchedData } from "express-validator";
+import type { Filter } from "mongodb";
+import {
+  buildPaginatorView,
+  parsePaginationQuery,
+  type PaginatorView,
+} from "../../_shared/pagination";
+import { postCreateForBlogValidators } from "../../posts/posts.validation";
+import type { PostView } from "../../posts/types/post";
+import { toPostView } from "../../posts/utils/to-post-view";
+import type { BlogDocument } from "../../../db/documents";
 import { blogsCollection, postsCollection } from "../../../db/mongo";
 import { requireBasicAuth } from "../../../middleware/basic-auth.middleware";
 import { sendValidationErrors } from "../../../middleware/validation.middleware";
@@ -17,13 +27,125 @@ export const blogsRouter = Router();
 
 blogsRouter.get(
   "/",
-  async (_req: Request, res: Response<BlogView[]>, next: NextFunction) => {
+  async (
+    req: Request,
+    res: Response<PaginatorView<BlogView>>,
+    next: NextFunction,
+  ) => {
     try {
+      const { pageNumber, pageSize, sortBy, sortDirection } = parsePaginationQuery(
+        req,
+        {
+          defaultSortBy: "createdAt",
+          allowedSortBy: ["createdAt", "name", "description", "websiteUrl", "id"],
+        },
+      );
+      const searchNameTerm =
+        typeof req.query.searchNameTerm === "string"
+          ? req.query.searchNameTerm.trim()
+          : "";
+      const filter: Filter<BlogDocument> = searchNameTerm
+        ? { name: { $regex: searchNameTerm, $options: "i" } }
+        : {};
+
       const docs = await blogsCollection()
-        .find({})
-        .sort({ createdAt: -1 })
+        .find(filter)
+        .sort({ [sortBy]: sortDirection })
+        .skip((pageNumber - 1) * pageSize)
+        .limit(pageSize)
         .toArray();
-      res.status(200).send(docs.map(toBlogView));
+      const totalCount = await blogsCollection().countDocuments(filter);
+      res.status(200).send(
+        buildPaginatorView(docs.map(toBlogView), totalCount, pageNumber, pageSize),
+      );
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+blogsRouter.get(
+  "/:blogId/posts",
+  async (
+    req: Request<{ blogId: string }>,
+    res: Response<PaginatorView<PostView>>,
+    next: NextFunction,
+  ) => {
+    try {
+      const blog = await blogsCollection().findOne({ id: req.params.blogId });
+      if (!blog) {
+        res.sendStatus(404);
+        return;
+      }
+
+      const { pageNumber, pageSize, sortBy, sortDirection } = parsePaginationQuery(
+        req,
+        {
+          defaultSortBy: "createdAt",
+          allowedSortBy: [
+            "createdAt",
+            "title",
+            "shortDescription",
+            "content",
+            "blogId",
+            "id",
+          ],
+        },
+      );
+
+      const docs = await postsCollection()
+        .find({ blogId: req.params.blogId })
+        .sort({ [sortBy]: sortDirection })
+        .skip((pageNumber - 1) * pageSize)
+        .limit(pageSize)
+        .toArray();
+      const views = await Promise.all(docs.map((doc) => toPostView(doc)));
+      const totalCount = await postsCollection().countDocuments({
+        blogId: req.params.blogId,
+      });
+
+      res
+        .status(200)
+        .send(buildPaginatorView(views, totalCount, pageNumber, pageSize));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+blogsRouter.post(
+  "/:blogId/posts",
+  requireBasicAuth,
+  postCreateForBlogValidators,
+  sendValidationErrors,
+  async (
+    req: Request<{ blogId: string }>,
+    res: Response<PostView>,
+    next: NextFunction,
+  ) => {
+    try {
+      const blog = await blogsCollection().findOne({ id: req.params.blogId });
+      if (!blog) {
+        res.sendStatus(404);
+        return;
+      }
+
+      const { title, shortDescription, content } = matchedData<{
+        title: string;
+        shortDescription: string;
+        content: string;
+      }>(req, { locations: ["body"] });
+
+      const doc = {
+        id: randomUUID(),
+        title,
+        shortDescription,
+        content,
+        blogId: req.params.blogId,
+        createdAt: new Date(),
+      };
+      await postsCollection().insertOne(doc);
+      res.status(201).send(await toPostView(doc));
     } catch (err) {
       next(err);
     }
